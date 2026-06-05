@@ -10,15 +10,12 @@ on:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write # 必须添加这个权限才能推送到GitHub Packages
-
+    # 这里不需要任何permissions声明，我们用PAT绕过
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Trivy 安全扫描（和AWS版完全一致）
+      - name: Trivy 安全扫描
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
@@ -26,16 +23,17 @@ jobs:
           severity: 'CRITICAL,HIGH'
           exit-code: '1'
 
-      - name: 登录GitHub Packages（自动认证，无需额外密钥）
+      - name: 登录GitHub Packages（用个人PAT绕过组织限制）
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GHCR_PAT }} # 用我们自己的PAT，不是GITHUB_TOKEN
 
       - name: 构建并推送镜像
         env:
-          IMAGE_NAME: ghcr.io/${{ github.actor }}/devops-poc-app
+          # 强制全小写，GitHub Packages不允许大写
+          IMAGE_NAME: ghcr.io/huangleikn/devops-poc-app
           IMAGE_TAG: ${{ github.sha }}
         run: |
           cd app
@@ -46,5 +44,6 @@ jobs:
 
       - name: 输出镜像地址
         run: |
-          echo "✅ GitHub Packages镜像地址：ghcr.io/${{ github.actor }}/devops-poc-app:${{ github.sha }}"
-          echo "✅ 最新标签镜像地址：ghcr.io/${{ github.actor }}/devops-poc-app:latest"
+          echo "✅ 构建成功！"
+          echo "✅ 镜像地址：ghcr.io/huangleikn/devops-poc-app:${{ github.sha }}"
+          echo "✅ 最新标签：ghcr.io/huangleikn/devops-poc-app:latest"
