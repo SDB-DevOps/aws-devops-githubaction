@@ -1,0 +1,28 @@
+# .github/workflows/2-cd-deploy-render.yml
+name: 2. CD 部署到Render（通用免费版）
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_url:
+        description: '要部署的完整镜像地址（例如：docker.io/xxx/devops-poc-app:latest）'
+        required: true
+        default: 'docker.io/你的DockerHub用户名/devops-poc-app:latest'
+
+jobs:
+  deploy-to-render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 部署到Render
+        uses: johnbeynon/render-deploy-action@v0.0.8
+        with:
+          service-id: ${{ secrets.RENDER_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+          image-url: ${{ inputs.image_url }}
+          wait-for-deploy: true
+
+      - name: 输出部署结果
+        run: |
+          echo "✅ 部署完成！"
+          echo "✅ 服务访问地址：https://devops-poc-app.onrender.com（替换为你的Render地址）"
+          echo "⚠️  免费实例第一次启动需要1-2分钟，请耐心等待"
