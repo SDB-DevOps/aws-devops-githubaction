@@ -1,0 +1,67 @@
+# .github/workflows/1-ci-build-push.yml
+name: 1. CI 构建并推送镜像到ECR
+
+# 触发条件：app目录代码变更自动触发，或手动触发
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'app/**' ]
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # 用于AWS OIDC认证（比硬编码密钥安全）
+
+    steps:
+      # 步骤1：拉取代码
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      # 步骤2：配置AWS凭证（提前在GitHub Secrets中配置）
+      - name: 配置AWS凭证
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # 步骤3：登录ECR
+      - name: 登录Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # 步骤4：Trivy安全扫描Dockerfile
+      - name: Trivy 镜像漏洞扫描
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'app/'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1' # 发现高危漏洞直接失败
+
+      # 步骤5：构建Docker镜像
+      - name: 构建Docker镜像
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPO_NAME }}
+          IMAGE_TAG: ${{ github.sha }} # 用Git提交SHA作为镜像标签
+        run: |
+          cd app
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      # 步骤6：推送镜像到ECR
+      - name: 推送镜像到ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPO_NAME }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: 输出镜像地址
+        run: echo "镜像已推送到：${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPO_NAME }}:${{ github.sha }}"

@@ -1,0 +1,40 @@
+# .github/workflows/2-cd-deploy-ecs.yml
+name: 2. CD 部署到ECS Fargate
+
+# 触发条件：仅手动触发（安全可控）
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: '要部署的镜像标签（默认用latest）'
+        required: true
+        default: 'latest'
+
+jobs:
+  deploy-to-ecs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置AWS凭证
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: 部署到ECS Fargate
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: infra/task-definition.json # 后面Terraform会生成这个文件
+          service: ${{ secrets.ECS_SERVICE_NAME }}
+          cluster: ${{ secrets.ECS_CLUSTER_NAME }}
+          wait-for-service-stability: true
+
+      - name: 输出部署结果
+        run: echo "部署完成！服务已更新到镜像标签：${{ inputs.image_tag }}"
