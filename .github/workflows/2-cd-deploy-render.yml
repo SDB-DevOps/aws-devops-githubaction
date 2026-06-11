@@ -10,17 +10,15 @@ on:
         required: true
         default: 'latest'
 
-  # ✅ 新增：CI 工作流成功完成后自动触发
+  # CI 工作流成功完成后自动触发
   workflow_run:
-    # 这里必须和 CI 文件里的 name 完全一致（包括标点和空格）
     workflows: ["1. CI 构建并推送镜像到GitHub Packages（免费版）"]
-    # 只在 CI 完成时触发（后面会加条件过滤成功状态）
     types: [completed]
 
 jobs:
   deploy-to-render:
     runs-on: ubuntu-latest
-    # ✅ 关键保护：只有 CI 构建成功了，才会运行这个部署任务
+    # 只有CI构建成功才运行部署
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     steps:
@@ -29,10 +27,78 @@ jobs:
         with:
           service-id: ${{ secrets.RENDER_SERVICE_ID }}
           api-key: ${{ secrets.RENDER_API_KEY }}
-          # 自动触发时用 latest 标签，手动触发时用你输入的标签
           image-url: ghcr.io/huangleikn/devops-poc-app:${{ inputs.image_tag || 'latest' }}
 
-      - name: 部署完成通知
+      - name: 部署成功通知（Slack+控制台）
         run: |
           echo "✅ 部署成功！"
-          echo "✅ 服务地址：devops-poc-app.onrender.com"
+          echo "✅ 服务地址：https://devops-poc-app.onrender.com"
+          
+          # 发送Slack成功通知
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "✅ 【部署成功】DevOps POC 应用已更新",
+              "attachments": [
+                {
+                  "color": "good",
+                  "fields": [
+                    {
+                      "title": "服务地址",
+                      "value": "https://devops-poc-app.onrender.com",
+                      "short": false
+                    },
+                    {
+                      "title": "提交者",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    },
+                    {
+                      "title": "触发方式",
+                      "value": "${{ github.event_name == 'workflow_dispatch' && '手动触发' || 'CI自动触发' }}",
+                      "short": true
+                    }
+                  ]
+                }
+              ]
+            }'
+
+  # 部署失败通知（独立Job，确保任何情况下失败都会触发）
+  notify-failure:
+    runs-on: ubuntu-latest
+    needs: deploy-to-render
+    if: ${{ failure() }}
+    
+    steps:
+      - name: 部署失败通知（Slack+控制台）
+        run: |
+          echo "❌ 部署失败！请查看GitHub Actions日志"
+          
+          # 发送Slack失败通知
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H "Content-Type: application/json" \
+            -d '{
+              "text": "❌ 【部署失败】DevOps POC 应用部署异常",
+              "attachments": [
+                {
+                  "color": "danger",
+                  "fields": [
+                    {
+                      "title": "错误日志",
+                      "value": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                      "short": false
+                    },
+                    {
+                      "title": "提交者",
+                      "value": "${{ github.actor }}",
+                      "short": true
+                    },
+                    {
+                      "title": "触发方式",
+                      "value": "${{ github.event_name == 'workflow_dispatch' && '手动触发' || 'CI自动触发' }}",
+                      "short": true
+                    }
+                  ]
+                }
+              ]
+            }'
