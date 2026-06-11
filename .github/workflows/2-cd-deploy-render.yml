@@ -35,4 +35,4 @@ jobs:
       - name: 部署完成通知
         run: |
           echo "✅ 部署成功！"
-          echo "✅ 服务地址：https://你的Render服务地址.onrender.com"
+          echo "✅ 服务地址：devops-poc-app.onrender.com"
